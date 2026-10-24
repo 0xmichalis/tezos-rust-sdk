@@ -1,0 +1,73 @@
+name: Auto Tag SDK
+
+# workflow_run supplies the tested main commit, including when main has moved
+# while CI was running. Never create tags from a pull request's CI run.
+on:
+  workflow_run:
+    workflows: [Test Code]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: sdk-auto-tag
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    env:
+      CHECKED_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.CHECKED_SHA }}
+          fetch-depth: 0
+
+      - name: Verify successful main CI
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$CHECKED_SHA" origin/main
+          PASSED=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml \
+            --commit "$CHECKED_SHA" --event push --status success \
+            --json databaseId --jq 'length')
+          [[ "$PASSED" -gt 0 ]] || { echo 'Main CI has not passed'; exit 1; }
+
+      - name: Create version tag or resume its release
+        id: tag
+        run: |
+          set -euo pipefail
+          VERSION=$(python3 .github/scripts/sdk_version.py)
+          TAG="v$VERSION"
+          if git rev-parse --verify "refs/tags/$TAG" >/dev/null 2>&1; then
+            TAG_SHA=$(git rev-parse "refs/tags/$TAG^{commit}")
+            if [[ "$TAG_SHA" != "$CHECKED_SHA" ]]; then
+              echo "$TAG already exists; bump the workspace version to release."
+              exit 0
+            fi
+          else
+            git tag "$TAG" "$CHECKED_SHA"
+            git push origin "refs/tags/$TAG"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+  # GITHUB_TOKEN tag pushes do not start new workflows. Calling the reusable
+  # release workflow also lets a rerun recover after a failed publication.
+  release:
+    needs: tag
+    if: needs.tag.outputs.tag != ''
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.tag.outputs.tag }}

@@ -9,6 +9,15 @@ on:
     branches:
     - main
     - develop
+  workflow_call:
+    inputs:
+      ref:
+        description: Git ref to validate
+        type: string
+        required: false
+
+permissions:
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -19,17 +28,21 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+
+      - name: Check SDK version and release helpers
+        run: |
+          python3 .github/scripts/sdk_version.py
+          python3 -m unittest discover -s .github/scripts -p 'test_*.py'
 
       - name: Install toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: nightly-2023-03-14
-          components: rustfmt, clippy
-          target: wasm32-unknown-unknown
-          override: true
-          default: true
+        run: |
+          rustup toolchain install 1.91.0 --profile minimal \
+            --component rustfmt --component clippy --target wasm32-unknown-unknown
+          rustup override set 1.91.0
 
       # Uncomment once linting issues have been fixed
       # Enable this for clippy linting.
@@ -37,13 +50,15 @@ jobs:
       #   run: cargo clippy -- -D warnings
 
       - name: Run cargo check
-        run: cargo check --locked
+        run: cargo check --locked --workspace --all-features
 
       - name: Run cargo build
-        run: cargo build --release
+        run: cargo build --release --workspace --all-features
 
       - name: Run cargo test
-        run: cargo test
+        run: |
+          cargo test --workspace
+          cargo test -p tezos-core --all-features
 
       - name: Run cargo fmt
         run: cargo fmt --check

@@ -31,9 +31,26 @@ The Tezos Rust SDK ships with tools that can be used to:
 
 ## Requirements
 
-Rust 1.60.0 or above.
+Rust 1.91.0 or above.
 
 Install the `rustc` compiler and the `cargo` command line tool through [rustup](https://rustup.rs).
+
+## Releases
+
+All five SDK crates share the version in `[workspace.package]` in the root
+`Cargo.toml`. Bump that version in a pull request. Once CI passes on `main`,
+the auto-tag workflow creates `v<version>` and calls the release workflow.
+The release workflow validates every crate version, runs CI against the tag,
+and publishes a GitHub release. Tags are never moved to a different commit.
+
+Consumers of this fork can pin a release in Cargo:
+
+```toml
+tezos-core = { git = "https://github.com/0xmichalis/tezos-rust-sdk", tag = "v0.3.0" }
+```
+
+Rerun the auto-tag workflow to retry an interrupted release, or dispatch
+`release.yml` with an existing tag to retry publication.
 
 ## Build
 
