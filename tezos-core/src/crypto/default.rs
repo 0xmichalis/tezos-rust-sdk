@@ -11,9 +11,13 @@ pub struct DefaultEd25519CryptoProvider;
 #[cfg(feature = "ed25519")]
 impl CryptoProvider for DefaultEd25519CryptoProvider {
     fn sign(&self, message: &[u8], secret: &[u8]) -> Result<Vec<u8>> {
-        use ed25519_dalek::{Keypair, Signer};
+        use ed25519_dalek::{Signer, SigningKey};
 
-        let keypair = Keypair::from_bytes(secret).map_err(|_| Error::InvalidSecretKeyBytes)?;
+        let secret = secret
+            .try_into()
+            .map_err(|_| Error::InvalidSecretKeyBytes)?;
+        let keypair =
+            SigningKey::from_keypair_bytes(secret).map_err(|_| Error::InvalidSecretKeyBytes)?;
         let signature = keypair.sign(message);
 
         Ok(signature.to_bytes().to_vec())
@@ -25,12 +29,15 @@ impl CryptoProvider for DefaultEd25519CryptoProvider {
         signature_bytes: &[u8],
         public_key_bytes: &[u8],
     ) -> Result<bool> {
-        use ed25519_dalek::{PublicKey, Signature, Verifier};
+        use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 
+        let public_key_bytes = public_key_bytes
+            .try_into()
+            .map_err(|_| Error::InvalidPublicKeyBytes)?;
         let public_key =
-            PublicKey::from_bytes(public_key_bytes).map_err(|_| Error::InvalidPublicKeyBytes)?;
+            VerifyingKey::from_bytes(public_key_bytes).map_err(|_| Error::InvalidPublicKeyBytes)?;
         let signature =
-            Signature::from_bytes(signature_bytes).map_err(|_| Error::InvalidSignatureBytes)?;
+            Signature::from_slice(signature_bytes).map_err(|_| Error::InvalidSignatureBytes)?;
 
         Ok(public_key.verify(message, &signature).is_ok())
     }
@@ -48,7 +55,7 @@ impl CryptoProvider for DefaultSecp256K1CryptoProvider {
     fn sign(&self, message: &[u8], secret: &[u8]) -> Result<Vec<u8>> {
         use k256::ecdsa::signature::hazmat::PrehashSigner;
 
-        let sk = k256::ecdsa::SigningKey::from_bytes(secret.into())
+        let sk = k256::ecdsa::SigningKey::from_slice(secret)
             .map_err(|_error| Error::InvalidSecretKeyBytes)?;
 
         let signature: k256::ecdsa::Signature = sk.sign_prehash(message)?;
@@ -61,9 +68,8 @@ impl CryptoProvider for DefaultSecp256K1CryptoProvider {
 
         let vk = k256::ecdsa::VerifyingKey::from_sec1_bytes(public_key)
             .map_err(|_error| Error::InvalidPublicKeyBytes)?;
-        let signature: k256::ecdsa::Signature =
-            k256::ecdsa::Signature::from_bytes(signature.into())
-                .map_err(|_error| Error::InvalidSignatureBytes)?;
+        let signature: k256::ecdsa::Signature = k256::ecdsa::Signature::from_slice(signature)
+            .map_err(|_error| Error::InvalidSignatureBytes)?;
         Ok(vk.verify_prehash(message, &signature).is_ok())
     }
 }
@@ -80,10 +86,12 @@ impl CryptoProvider for DefaultP256CryptoProvider {
     fn sign(&self, message: &[u8], secret: &[u8]) -> Result<Vec<u8>> {
         use p256::ecdsa::signature::hazmat::PrehashSigner;
 
-        let sk = p256::ecdsa::SigningKey::from_bytes(secret.into())
+        let sk = p256::ecdsa::SigningKey::from_slice(secret)
             .map_err(|_error| Error::InvalidSecretKeyBytes)?;
 
-        let signature: p256::ecdsa::Signature = sk.sign_prehash(message.into())?;
+        let signature: p256::ecdsa::Signature = sk
+            .sign_prehash(message)
+            .map_err(|source| Error::P256Signing { source })?;
 
         Ok(signature.to_vec())
     }
@@ -93,9 +101,8 @@ impl CryptoProvider for DefaultP256CryptoProvider {
 
         let vk = p256::ecdsa::VerifyingKey::from_sec1_bytes(public_key)
             .map_err(|_error| Error::InvalidPublicKeyBytes)?;
-        let signature: p256::ecdsa::Signature =
-            p256::ecdsa::Signature::from_bytes(signature.into())
-                .map_err(|_error| Error::InvalidSignatureBytes)?;
+        let signature: p256::ecdsa::Signature = p256::ecdsa::Signature::from_slice(signature)
+            .map_err(|_error| Error::InvalidSignatureBytes)?;
         Ok(vk.verify_prehash(message, &signature).is_ok())
     }
 }
@@ -144,6 +151,79 @@ mod test {
                 127, 243, 48, 11, 240, 71, 99, 28, 200, 230, 177, 85, 181, 103, 88,
             ],
         )
+    }
+
+    #[cfg(feature = "ed25519")]
+    #[test]
+    fn test_ed25519_sign_rejects_mismatched_public_key() {
+        let mut secret = ed25519_pair().0.to_vec();
+        let other_key = ed25519_dalek::SigningKey::from_bytes(&[7; 32]);
+        secret[32..].copy_from_slice(other_key.verifying_key().as_bytes());
+
+        assert!(matches!(
+            DefaultEd25519CryptoProvider.sign(b"message", &secret),
+            Err(Error::InvalidSecretKeyBytes)
+        ));
+    }
+
+    #[cfg(feature = "ed25519")]
+    #[test]
+    fn test_ed25519_rejects_invalid_lengths() {
+        let cp = DefaultEd25519CryptoProvider;
+        for length in [0, 31, 32, 63, 65] {
+            assert!(matches!(
+                cp.sign(b"message", &vec![0; length]),
+                Err(Error::InvalidSecretKeyBytes)
+            ));
+        }
+        for length in [0, 31, 33] {
+            assert!(matches!(
+                cp.verify(b"message", &[0; 64], &vec![0; length]),
+                Err(Error::InvalidPublicKeyBytes)
+            ));
+        }
+        for length in [0, 63, 65] {
+            assert!(matches!(
+                cp.verify(b"message", &vec![0; length], ed25519_pair().1),
+                Err(Error::InvalidSignatureBytes)
+            ));
+        }
+    }
+
+    #[cfg(feature = "secp256_k1")]
+    #[test]
+    fn test_secp256_k1_rejects_invalid_lengths() {
+        let cp = DefaultSecp256K1CryptoProvider;
+        for length in [0, 31, 33] {
+            assert!(matches!(
+                cp.sign(&[0; 32], &vec![0; length]),
+                Err(Error::InvalidSecretKeyBytes)
+            ));
+        }
+        for length in [0, 63, 65] {
+            assert!(matches!(
+                cp.verify(&[0; 32], &vec![0; length], secp256_k1_pair().1),
+                Err(Error::InvalidSignatureBytes)
+            ));
+        }
+    }
+
+    #[cfg(feature = "p256")]
+    #[test]
+    fn test_p256_rejects_invalid_lengths() {
+        let cp = DefaultP256CryptoProvider;
+        for length in [0, 31, 33] {
+            assert!(matches!(
+                cp.sign(&[0; 32], &vec![0; length]),
+                Err(Error::InvalidSecretKeyBytes)
+            ));
+        }
+        for length in [0, 63, 65] {
+            assert!(matches!(
+                cp.verify(&[0; 32], &vec![0; length], p256_pair().1),
+                Err(Error::InvalidSignatureBytes)
+            ));
+        }
     }
 
     #[cfg(feature = "ed25519")]

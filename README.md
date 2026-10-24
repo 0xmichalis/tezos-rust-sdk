@@ -31,7 +31,7 @@ The Tezos Rust SDK ships with tools that can be used to:
 
 ## Requirements
 
-Rust 1.60.0 or above.
+Rust 1.91.0 or above.
 
 Install the `rustc` compiler and the `cargo` command line tool through [rustup](https://rustup.rs).
 

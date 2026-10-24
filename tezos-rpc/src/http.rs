@@ -66,10 +66,9 @@ pub mod default {
                     .get(CONTENT_TYPE)
                     .and_then(|value| value.to_str().ok())
                     .is_some_and(|value| {
-                        value
-                            .split(';')
-                            .next()
-                            .is_some_and(|mime| mime.trim().eq_ignore_ascii_case("application/json"))
+                        value.split(';').next().is_some_and(|mime| {
+                            mime.trim().eq_ignore_ascii_case("application/json")
+                        })
                     });
                 if is_json {
                     let errors: Vec<RpcError> = response.json().await?;
