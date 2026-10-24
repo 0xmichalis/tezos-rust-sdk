@@ -9,6 +9,15 @@ on:
     branches:
     - main
     - develop
+  workflow_call:
+    inputs:
+      ref:
+        description: Git ref to validate
+        type: string
+        required: false
+
+permissions:
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -19,7 +28,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+
+      - name: Check SDK version and release helpers
+        run: |
+          python3 .github/scripts/sdk_version.py
+          python3 -m unittest discover -s .github/scripts -p 'test_*.py'
 
       - name: Install toolchain
         uses: actions-rs/toolchain@v1

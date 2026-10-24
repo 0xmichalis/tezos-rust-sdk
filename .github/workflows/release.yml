@@ -1,0 +1,83 @@
+name: Release SDK
+
+on:
+  push:
+    tags: [v*]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing SDK tag to release
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sdk-release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - name: Validate tag syntax
+        id: tag
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]; then
+            echo 'Expected a vMAJOR.MINOR.PATCH release tag' >&2
+            exit 1
+          fi
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify crate versions and main history
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/sdk_version.py --tag "$RELEASE_TAG"
+          git merge-base --is-ancestor HEAD origin/main
+
+  checks:
+    needs: validate
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ needs.validate.outputs.tag }}
+
+  publish:
+    needs: [validate, checks]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+    steps:
+      - name: Publish GitHub release
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "$RELEASE_TAG is already published."
+            exit 0
+          fi
+          OPTIONS=()
+          if [[ "$RELEASE_TAG" == *-* ]]; then
+            OPTIONS+=(--prerelease)
+          fi
+          gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --verify-tag --title "Tezos Rust SDK $RELEASE_TAG" \
+            --generate-notes "${OPTIONS[@]}"

@@ -1,5 +1,4 @@
 [workspace]
-
 members = [
     "tezos-core",
     "tezos-michelson",
@@ -13,3 +12,6 @@ exclude = [
     "samples/operation-sample",
     "samples/contract-sample",
 ]
+
+[workspace.package]
+version = "0.3.0"
