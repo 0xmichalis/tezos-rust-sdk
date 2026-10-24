@@ -39,14 +39,10 @@ jobs:
           python3 -m unittest discover -s .github/scripts -p 'test_*.py'
 
       - name: Install toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: 1.91.0
-          components: rustfmt, clippy
-          target: wasm32-unknown-unknown
-          override: true
-          default: true
+        run: |
+          rustup toolchain install 1.91.0 --profile minimal \
+            --component rustfmt --component clippy --target wasm32-unknown-unknown
+          rustup override set 1.91.0
 
       # Uncomment once linting issues have been fixed
       # Enable this for clippy linting.
