@@ -44,6 +44,30 @@ pub mod default {
 
     use super::*;
     use reqwest::{header::CONTENT_TYPE, Client, Response};
+    use std::time::Duration;
+
+    const MAX_RESPONSE_BYTES: usize = 16 * 1024 * 1024;
+
+    async fn read_bounded(mut response: Response) -> Result<Vec<u8>, Error> {
+        if response
+            .content_length()
+            .is_some_and(|length| length > MAX_RESPONSE_BYTES as u64)
+        {
+            return Err(Error::ResponseTooLarge {
+                limit: MAX_RESPONSE_BYTES,
+            });
+        }
+        let mut body = Vec::new();
+        while let Some(chunk) = response.chunk().await? {
+            if body.len() + chunk.len() > MAX_RESPONSE_BYTES {
+                return Err(Error::ResponseTooLarge {
+                    limit: MAX_RESPONSE_BYTES,
+                });
+            }
+            body.extend_from_slice(&chunk);
+        }
+        Ok(body)
+    }
 
     #[derive(Debug)]
     pub struct HttpClient {
@@ -70,16 +94,18 @@ pub mod default {
                             mime.trim().eq_ignore_ascii_case("application/json")
                         })
                     });
+                let body = read_bounded(response).await?;
                 if is_json {
-                    let errors: Vec<RpcError> = response.json().await?;
+                    let errors: Vec<RpcError> = serde_json::from_slice(&body)?;
                     return Err(Error::RpcErrors(errors.into()));
                 }
                 return Err(Error::RpcErrorPlain {
-                    description: response.text().await?,
+                    description: String::from_utf8_lossy(&body).into_owned(),
                 });
             }
 
-            Ok(response.json().await?)
+            let body = read_bounded(response).await?;
+            Ok(serde_json::from_slice(&body)?)
         }
     }
 
@@ -121,6 +147,24 @@ pub mod default {
             let result = client.get::<serde_json::Value>("/unavailable").await;
             assert!(matches!(result, Err(Error::RpcErrors(_))));
         }
+
+        #[tokio::test]
+        async fn oversized_response_body_is_rejected() {
+            let server = MockServer::start();
+            let oversized = vec![b'a'; MAX_RESPONSE_BYTES + 1];
+            server.mock(|when, then| {
+                when.method(GET).path("/huge");
+                then.status(200)
+                    .header("content-type", "application/json")
+                    .body(oversized);
+            });
+
+            let client = HttpClient::new(server.base_url());
+            match client.get::<serde_json::Value>("/huge").await {
+                Err(Error::ResponseTooLarge { limit }) => assert_eq!(limit, MAX_RESPONSE_BYTES),
+                other => panic!("expected response too large error, got {other:?}"),
+            }
+        }
     }
 
     #[cfg(feature = "http")]
@@ -128,9 +172,15 @@ pub mod default {
     impl Http for HttpClient {
         /// Creates an Http client that will be used to send requests to the specified node.
         fn new(rpc_endpoint: String) -> Self {
+            let client = Client::builder()
+                .connect_timeout(Duration::from_secs(10))
+                .read_timeout(Duration::from_secs(30))
+                .timeout(Duration::from_secs(300))
+                .build()
+                .expect("static client configuration");
             Self {
                 rpc_endpoint,
-                client: Client::new(),
+                client,
             }
         }
 

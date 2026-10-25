@@ -28,6 +28,10 @@ pub enum Error {
         description: String,
     },
     RpcErrors(#[error(not(source))] RpcErrors),
+    #[display(fmt = "response body exceeds {} bytes", limit)]
+    ResponseTooLarge {
+        limit: usize,
+    },
     InvalidConversion,
     OperationNotSupported,
 }
