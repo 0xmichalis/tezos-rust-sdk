@@ -46,7 +46,7 @@ and publishes a GitHub release. Tags are never moved to a different commit.
 Consumers of this fork can pin a release in Cargo:
 
 ```toml
-tezos-core = { git = "https://github.com/0xmichalis/tezos-rust-sdk", tag = "v0.3.0" }
+tezos-core = { git = "https://github.com/0xmichalis/tezos-rust-sdk", tag = "v0.4.0" }
 ```
 
 Rerun the auto-tag workflow to retry an interrupted release, or dispatch

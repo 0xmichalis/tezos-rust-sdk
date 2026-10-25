@@ -243,6 +243,7 @@ mod test {
 
     fn operations_with_signatures(
     ) -> Vec<((SecretKey, PublicKey), Vec<(UnsignedOperation, Signature)>)> {
+        // ECDSA fixtures sign the watermarked Blake2b hash without hashing it again.
         vec![
             #[cfg(feature = "ed25519")]
             (
@@ -273,20 +274,20 @@ mod test {
                 vec![
                     (
                         UnsignedOperation::new("BLjg4HU2BwnCgJfRutxJX5rHACzLDxRJes1MXqbXXdxvHWdK3Te".try_into().unwrap(), vec![]),
-                        "spsig1LLFq38AD2eLN6qqVSFsTRsG2UP5JGj87EgiVoiDDmaoCghVButYNbP8RoqrJqq8hCeacJY2hKx5zfm4QpmQKytZYeKjNw".try_into().unwrap(), // "spsig1LPnrCkaRypLUz3UYdxQGVpxfSAxWwSV2HpaitKWvqRN6CDqqLJwWNn1S9kEWT2ZLrWq7m2361YVMN4LNkc9FVPdxBjYZi".try_into().unwrap(),
+                        "spsig1LPnrCkaRypLUz3UYdxQGVpxfSAxWwSV2HpaitKWvqRN6CDqqLJwWNn1S9kEWT2ZLrWq7m2361YVMN4LNkc9FVPdxBjYZi".try_into().unwrap(), // "spsig1LPnrCkaRypLUz3UYdxQGVpxfSAxWwSV2HpaitKWvqRN6CDqqLJwWNn1S9kEWT2ZLrWq7m2361YVMN4LNkc9FVPdxBjYZi".try_into().unwrap(),
                     ),
                     (
                         UnsignedOperation::new("BLjg4HU2BwnCgJfRutxJX5rHACzLDxRJes1MXqbXXdxvHWdK3Te".try_into().unwrap(), vec![
                             SeedNonceRevelation::new(1, "6cdaf9367e551995a670a5c642a9396290f8c9d17e6bc3c1555bfaa910d92214".try_into().unwrap()).into()
                         ]),
-                        "spsig1LivvNV6aDUqUNyVwRS9xSEQfzoPkwUZqXEhT8tpeGFEHvUVoPCfVDSoKabUwqc7ERKVwZFtjXKGSHXpNxwKkhxxqsL9iT".try_into().unwrap(), // "spsig1SC5sFkHG4YssRxQJQ5onZ8GNvfQDqk5cz1e6fdPhCNva3baoPCiE9fk6JcyUedEDFAEeMBgC7L6LeYBhFHpVrxjs96iuB".try_into().unwrap(),
+                        "spsig1SC5sFkHG4YssRxQJQ5onZ8GNvfQDqk5cz1e6fdPhCNva3baoPCiE9fk6JcyUedEDFAEeMBgC7L6LeYBhFHpVrxjs96iuB".try_into().unwrap(), // "spsig1SC5sFkHG4YssRxQJQ5onZ8GNvfQDqk5cz1e6fdPhCNva3baoPCiE9fk6JcyUedEDFAEeMBgC7L6LeYBhFHpVrxjs96iuB".try_into().unwrap(),
                     ),
                     (
                         UnsignedOperation::new("BLjg4HU2BwnCgJfRutxJX5rHACzLDxRJes1MXqbXXdxvHWdK3Te".try_into().unwrap(), vec![
                             SeedNonceRevelation::new(1, "9d15bcdc0194b327d3cb0dcd05242bc6ff1635da635e38ed7a62b8c413ce6833".try_into().unwrap()).into(),
                             SeedNonceRevelation::new(2, "921ed0115c7cc1b5dcd07ad66ce4d9b2b0186c93c27a80d70b66b4e309add170".try_into().unwrap()).into()
                         ]),
-                        "spsig1J84hkDfZ216y94k94GwqnrEADm1KHTz5SFmrSRfBC6hfkpxwRw29nAa1baGGwmAdDNwUyrQsWFqJXdw1t3isd28U8AMAu".try_into().unwrap(), // "spsig1XFTLzrozPJ7Kc9aVNwK4hjpub7cWu8a95LmSKNucsPZjrgq3QRcQWtvo1fbBzpeWPK56XaUiJRN6B59kzueT6LCqTWK8R".try_into().unwrap(),
+                        "spsig1XFTLzrozPJ7Kc9aVNwK4hjpub7cWu8a95LmSKNucsPZjrgq3QRcQWtvo1fbBzpeWPK56XaUiJRN6B59kzueT6LCqTWK8R".try_into().unwrap(), // "spsig1XFTLzrozPJ7Kc9aVNwK4hjpub7cWu8a95LmSKNucsPZjrgq3QRcQWtvo1fbBzpeWPK56XaUiJRN6B59kzueT6LCqTWK8R".try_into().unwrap(),
                     ),
                 ]
             ),
@@ -296,20 +297,20 @@ mod test {
                 vec![
                     (
                         UnsignedOperation::new("BLjg4HU2BwnCgJfRutxJX5rHACzLDxRJes1MXqbXXdxvHWdK3Te".try_into().unwrap(), vec![]),
-                        "p2sigeAUuv22uDfL2PacEnGPMATgYiqJFGS7iYvXnG19cQHa75Ak8ie5LJKZrFKRqiNHsu31ga1Ymn2h2d2oJfFNqDPuBSYAH4".try_into().unwrap(), // "p2sigY5tNCTjyR3w2rbgBHnkcEChmtk43Gt6BKqwX2TsNdpVojk3QgRy9Wf3TMkAyRnagy4LrhC4AfVDFBQK87sqBipsNkCt5N".try_into().unwrap(),
+                        "p2sigY5tNCTjyR3w2rbgBHnkcEChmtk43Gt6BKqwX2TsNdpVpyKRDZdqgcCaUxToVMYKj8einsNywSCanCfnNay8vPKLiqouEM".try_into().unwrap(), // "p2sigY5tNCTjyR3w2rbgBHnkcEChmtk43Gt6BKqwX2TsNdpVojk3QgRy9Wf3TMkAyRnagy4LrhC4AfVDFBQK87sqBipsNkCt5N".try_into().unwrap(),
                     ),
                     (
                         UnsignedOperation::new("BLjg4HU2BwnCgJfRutxJX5rHACzLDxRJes1MXqbXXdxvHWdK3Te".try_into().unwrap(), vec![
                             SeedNonceRevelation::new(1, "6cdaf9367e551995a670a5c642a9396290f8c9d17e6bc3c1555bfaa910d92214".try_into().unwrap()).into()
                         ]),
-                        "p2sigTtg4JV68veqnEXLTvbnc6snBNkDt417QpF7HPVwKQYswhCaD1hLBn1RDTHEgU8eKGD8sEz1g36y6wyoUdknJH4EwAKKdr".try_into().unwrap(), // "p2sigUMZVy7WyyvYawCt8oW4eMvXCTWtmU6PCfsTbKmAUXuHFCcH8ER7ZwtNqsnwYER9DRKXfao9xhUFfYdxZPFFDi4J7nckvt".try_into().unwrap(),
+                        "p2sigUMZVy7WyyvYawCt8oW4eMvXCTWtmU6PCfsTbKmAUXuHFCcH8ER7ZwtNqsnwYER9DRKXfao9xhUFfYdxZPFFDi4J7nckvt".try_into().unwrap(), // "p2sigUMZVy7WyyvYawCt8oW4eMvXCTWtmU6PCfsTbKmAUXuHFCcH8ER7ZwtNqsnwYER9DRKXfao9xhUFfYdxZPFFDi4J7nckvt".try_into().unwrap(),
                     ),
                     (
                         UnsignedOperation::new("BLjg4HU2BwnCgJfRutxJX5rHACzLDxRJes1MXqbXXdxvHWdK3Te".try_into().unwrap(), vec![
                             SeedNonceRevelation::new(1, "9d15bcdc0194b327d3cb0dcd05242bc6ff1635da635e38ed7a62b8c413ce6833".try_into().unwrap()).into(),
                             SeedNonceRevelation::new(2, "921ed0115c7cc1b5dcd07ad66ce4d9b2b0186c93c27a80d70b66b4e309add170".try_into().unwrap()).into()
                         ]),
-                        "p2sigPCKxgbzaH1zxX8Hb4cFvTpUUK2rbESVSPbvgcVSUmzfP8Q3kLYwNkATj2bJrDdPEAn8xqSWq6pia3Sidb2LQzC2DkSTVZ".try_into().unwrap(), // "p2sigrjm1STjRF4ygPiPzd4L34MzCErExERsH79jWwJTdYqdaYbYA29UfE1y8f78268B2xNdT3gzR5tXR7G21DCYyYkGnFe3Dm".try_into().unwrap(),
+                        "p2sigrjm1STjRF4ygPiPzd4L34MzCErExERsH79jWwJTdYqdaYbYA29UfE1y8f78268B2xNdT3gzR5tXR7G21DCYyYkGnFe3Dm".try_into().unwrap(), // "p2sigrjm1STjRF4ygPiPzd4L34MzCErExERsH79jWwJTdYqdaYbYA29UfE1y8f78268B2xNdT3gzR5tXR7G21DCYyYkGnFe3Dm".try_into().unwrap(),
                     ),
                 ]
             )
