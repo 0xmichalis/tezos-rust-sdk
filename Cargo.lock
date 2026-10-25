@@ -2564,7 +2564,7 @@ dependencies = [
 
 [[package]]
 name = "tezos-contract"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "async-trait",
  "derive_more",
@@ -2578,7 +2578,7 @@ dependencies = [
 
 [[package]]
 name = "tezos-core"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "blake2",
  "bs58",
@@ -2598,7 +2598,7 @@ dependencies = [
 
 [[package]]
 name = "tezos-michelson"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "chrono",
  "derive_more",
@@ -2615,7 +2615,7 @@ dependencies = [
 
 [[package]]
 name = "tezos-operation"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "chrono",
  "derive_more",
@@ -2629,7 +2629,7 @@ dependencies = [
 
 [[package]]
 name = "tezos-rpc"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "async-trait",
  "chrono",
