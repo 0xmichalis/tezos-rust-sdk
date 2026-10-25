@@ -39,19 +39,16 @@ impl NaturalBytesCoder {
         Self::encode_with(next_value, [encoded, vec![encoded_byte]].concat())
     }
 
-    fn decode_with<CL: ConsumableList<u8>>(
-        value: &mut CL,
-        decoded: BigUint,
-        shift: u8,
-    ) -> Result<BigUint> {
-        let byte = value.consume_first()?;
-        let part = BigUint::from(byte & 0b0111_1111u8);
-        let has_next = (byte & 0b1000_0000) == 0b1000_0000;
-        let decoded = decoded + (part << shift);
-        if has_next {
-            return Self::decode_with(value, decoded, shift + 7);
+    fn decode_with<CL: ConsumableList<u8>>(value: &mut CL) -> Result<BigUint> {
+        let mut groups = Vec::new();
+        loop {
+            let byte = value.consume_first()?;
+            groups.push(byte & 0b0111_1111u8);
+            if (byte & 0b1000_0000) == 0 {
+                break;
+            }
         }
-        return Ok(decoded);
+        BigUint::from_radix_le(&groups, 128).ok_or(Error::InvalidNaturalBytes)
     }
 }
 
@@ -78,7 +75,7 @@ impl ConsumingDecoder<Nat, u8, Error> for NaturalBytesCoder {
         if value.is_empty() {
             return Err(Error::InvalidNaturalBytes);
         }
-        let result = Self::decode_with(value, BigUint::zero(), 0)?;
+        let result = Self::decode_with(value)?;
 
         Ok(result.into())
     }
@@ -137,6 +134,36 @@ mod test {
             let decoded = NaturalBytesCoder::decode(&bytes)?;
             assert_eq!(value, decoded);
         }
+
+        Ok(())
+    }
+
+    #[test]
+    fn decode_large_naturals_without_overflow() -> Result<()> {
+        // 2^252 is the largest value the previous u8 shift accumulator handled (36 groups).
+        let two_pow_252 = BigUint::from(1u8) << 252u32;
+        // 2^259 needs 37 continuation bytes and overflowed the previous u8 shift accumulator:
+        // it panicked in debug builds and silently decoded as 8 in release builds.
+        let two_pow_259 = BigUint::from(1u8) << 259u32;
+        let two_pow_259_plus_five = &two_pow_259 + BigUint::from(5u8);
+        let two_pow_1000_plus_12345 = (BigUint::from(1u8) << 1000u32) + BigUint::from(12345u32);
+
+        for value in [
+            two_pow_252,
+            two_pow_259.clone(),
+            two_pow_259_plus_five,
+            two_pow_1000_plus_12345,
+        ] {
+            let bytes = NaturalBytesCoder::encode(&value.clone().into())?;
+            let decoded = NaturalBytesCoder::decode(&bytes)?;
+            assert_eq!(decoded.to_integer::<BigUint>().unwrap(), value);
+        }
+
+        // The canonical encoding of 2^259 is exactly 37 x 0x80 followed by 0x01.
+        let mut canonical = vec![0x80u8; 37];
+        canonical.push(0x01);
+        let decoded = NaturalBytesCoder::decode(&canonical)?;
+        assert_eq!(decoded.to_integer::<BigUint>().unwrap(), two_pow_259);
 
         Ok(())
     }
