@@ -167,7 +167,14 @@ macro_rules! make_encoded_struct {
                     if META.is_valid_base58(&value) {
                         return Ok($name(value));
                     }
-                    return Err(Error::InvalidBase58EncodedData { description: value });
+                    return Err(Error::InvalidBase58EncodedData {
+                        description: format!(
+                            "expected {}-prefixed value of length {}, got length {}",
+                            META.base58_prefix,
+                            META.base58_length,
+                            value.len()
+                        ),
+                    });
                 }
 
                 fn from_bytes(bytes: &[u8]) -> Result<Self> {

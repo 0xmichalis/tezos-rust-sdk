@@ -69,7 +69,7 @@ impl MetaEncoded {
             .find(|item| item.is_valid_base58(value))
             .map(|item| *item)
             .ok_or(Error::InvalidBase58EncodedData {
-                description: value.into(),
+                description: format!("unrecognized base58 encoding, got length {}", value.len()),
             })
     }
 
@@ -92,4 +92,21 @@ impl MetaEncoded {
 
 pub trait TraitMetaEncoded {
     fn meta_value() -> &'static MetaEncoded;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recognize_base58_error_does_not_include_input() {
+        let secret = format!("edsk{}", "1".repeat(56));
+        let error = MetaEncoded::recognize_base58(&secret).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "unrecognized base58 encoding, got length 60"
+        );
+        assert!(!error.to_string().contains(&secret));
+        assert!(!format!("{error:?}").contains(&secret));
+    }
 }
