@@ -54,7 +54,9 @@ impl Encoded for Key {
         if PublicKey::is_valid_base58(&value) {
             return Ok(Self::Public(PublicKey::new(value)?));
         }
-        Err(Error::InvalidBase58EncodedData { description: value })
+        Err(Error::InvalidBase58EncodedData {
+            description: format!("invalid key encoding, got length {}", value.len()),
+        })
     }
 
     fn to_bytes(&self) -> Result<Vec<u8>> {
@@ -177,7 +179,9 @@ impl Encoded for SecretKey {
         if P256SecretKey::is_valid_base58(&value) {
             return Ok(Self::P256(P256SecretKey::new(value)?));
         }
-        Err(Error::InvalidBase58EncodedData { description: value })
+        Err(Error::InvalidBase58EncodedData {
+            description: format!("invalid secret key encoding, got length {}", value.len()),
+        })
     }
 
     fn from_bytes(bytes: &[u8]) -> Result<Self> {
@@ -591,5 +595,38 @@ mod test {
             return Ok(());
         }
         Err(Error::InvalidConversion)
+    }
+
+    #[test]
+    fn secret_key_parse_error_does_not_include_input() {
+        let secret = format!("edsk{}", "1".repeat(50));
+        let error = SecretKey::try_from(secret.as_str()).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "invalid secret key encoding, got length 54"
+        );
+        assert!(!error.to_string().contains(&secret));
+        assert!(!format!("{error:?}").contains(&secret));
+    }
+
+    #[test]
+    fn key_parse_error_does_not_include_input() {
+        let secret = format!("edsk{}", "1".repeat(50));
+        let error = Key::try_from(secret.as_str()).unwrap_err();
+        assert_eq!(error.to_string(), "invalid key encoding, got length 54");
+        assert!(!error.to_string().contains(&secret));
+        assert!(!format!("{error:?}").contains(&secret));
+    }
+
+    #[test]
+    fn typed_secret_key_parse_error_does_not_include_input() {
+        let secret = format!("edsk{}", "1".repeat(50));
+        let error = Ed25519SecretKey::try_from(secret.as_str()).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "expected edsk-prefixed value of length 98, got length 54"
+        );
+        assert!(!error.to_string().contains(&secret));
+        assert!(!format!("{error:?}").contains(&secret));
     }
 }
