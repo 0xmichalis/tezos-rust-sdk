@@ -57,8 +57,8 @@ jobs:
 
       - name: Run cargo test
         run: |
-          cargo test --workspace
-          cargo test -p tezos-core --all-features
+          cargo test --locked --workspace
+          cargo test --locked --workspace --all-features
 
       - name: Run cargo fmt
         run: cargo fmt --check
