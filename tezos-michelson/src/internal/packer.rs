@@ -750,11 +750,11 @@ impl MichelinePacker {
         match value {
             Literal::Int(value) => {
                 let value = value.to_i64().ok_or(Error::MichelineValueSchemaMismatch)?;
-                let ts_secs = value / 1000;
-                let ts_ns = (value % 1000) * 1_000_000;
+                let ts_secs = value.div_euclid(1000);
+                let ts_ns = (value.rem_euclid(1000) * 1_000_000) as u32;
                 let dt = DateTime::<Utc>::from_utc(
-                    NaiveDateTime::from_timestamp_opt(ts_secs, ts_ns as u32)
-                        .expect("out-of-range number of seconds and/or invalid nanosecond"),
+                    NaiveDateTime::from_timestamp_opt(ts_secs, ts_ns)
+                        .ok_or(Error::MichelineValueSchemaMismatch)?,
                     Utc,
                 );
                 Ok(
@@ -1254,5 +1254,38 @@ mod test {
                 Some(types::lambda(types::unit(), types::unit())),
             ),
         ]
+    }
+
+    #[test]
+    fn post_unpack_timestamp_never_panics() -> Result<()> {
+        for value in [-1i64, -999] {
+            let expected = DateTime::<Utc>::from_utc(
+                NaiveDateTime::from_timestamp_opt(
+                    value.div_euclid(1000),
+                    (value.rem_euclid(1000) * 1_000_000) as u32,
+                )
+                .unwrap(),
+                Utc,
+            )
+            .to_rfc3339_opts(SecondsFormat::Millis, true);
+            match MichelinePacker::post_unpack_timestamp(Literal::Int(value.into()))? {
+                Micheline::Literal(Literal::String(string)) => {
+                    assert_eq!(string.to_str(), expected)
+                }
+                other => panic!("expected a string literal, got {other:?}"),
+            }
+        }
+
+        for value in [i64::MAX, 10_000_000_000_000_000] {
+            assert!(
+                matches!(
+                    MichelinePacker::post_unpack_timestamp(Literal::Int(value.into())),
+                    Err(Error::MichelineValueSchemaMismatch)
+                ),
+                "timestamp {value} should be rejected"
+            );
+        }
+
+        Ok(())
     }
 }
