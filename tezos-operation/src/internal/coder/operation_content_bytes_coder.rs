@@ -610,10 +610,10 @@ impl ConsumingDecoder<BlockHeader, u8, Error> for OperationContentBytesCoder {
         let predecessor = BlockHash::from_consumable_bytes(value)?;
         let timestamp_millis = utils::decode_consuming_i64(value)?;
 
-        let ts_secs = timestamp_millis / 1000;
-        let ts_ns = (timestamp_millis % 1000) * 1_000_000;
-        let timestamp = NaiveDateTime::from_timestamp_opt(ts_secs, ts_ns as u32)
-            .expect("out-of-range number of seconds and/or invalid nanosecond");
+        let ts_secs = timestamp_millis.div_euclid(1000);
+        let ts_ns = (timestamp_millis.rem_euclid(1000) * 1_000_000) as u32;
+        let timestamp =
+            NaiveDateTime::from_timestamp_opt(ts_secs, ts_ns).ok_or(Error::InvalidBytes)?;
 
         let validation_pass = value.consume_first()?;
         let operations_hash = OperationListListHash::from_consumable_bytes(value)?;
@@ -949,5 +949,48 @@ impl ConsumingDecoder<SetDepositsLimit, u8, Error> for OperationContentBytesCode
                 ))
             },
         )
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    fn truncated_block_header(timestamp_millis: i64) -> Vec<u8> {
+        [
+            utils::encode_i32(0).as_slice(),
+            &[0],
+            &[0u8; 32],
+            utils::encode_i64(timestamp_millis).as_slice(),
+        ]
+        .concat()
+    }
+
+    #[test]
+    fn block_header_decode_does_not_panic_on_unrepresentable_timestamp() {
+        // Before the fix these negative millisecond values made from_timestamp_opt return
+        // None and the decoder panicked on .expect. They now convert, so decoding proceeds
+        // past the timestamp and fails only because the header is truncated.
+        for value in [-1i64, -999] {
+            let bytes = truncated_block_header(value);
+            let mut consumable = ConsumableBytes::new(&bytes);
+            let result: Result<BlockHeader> =
+                OperationContentBytesCoder::decode_consuming(&mut consumable);
+            assert!(
+                matches!(result, Err(Error::Core { .. })),
+                "timestamp {value} should convert and then hit the truncated header, got {result:?}"
+            );
+        }
+
+        // i64::MAX milliseconds fall outside chrono's representable range and are refused
+        // by the timestamp step itself instead of panicking.
+        let bytes = truncated_block_header(i64::MAX);
+        let mut consumable = ConsumableBytes::new(&bytes);
+        let result: Result<BlockHeader> =
+            OperationContentBytesCoder::decode_consuming(&mut consumable);
+        assert!(
+            matches!(result, Err(Error::InvalidBytes)),
+            "timestamp i64::MAX should be rejected, got {result:?}"
+        );
     }
 }
