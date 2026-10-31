@@ -17,7 +17,7 @@ tezos-operation = { path = "../tezos-operation" }
 
 [dev-dependencies]
 tokio = { version = "1.19", features = ["macros"] }
-httpmock = { version = "0.6" }
+httpmock = { version = "0.9" }
 
 [features]
 default = [ "tezos-rpc/default" ]
