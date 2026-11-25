@@ -248,6 +248,16 @@ trait TryUpdateWith<T> {
 
 impl TryUpdateWith<Vec<OperationContent>> for UnsignedOperation {
     fn try_update_with(self, value: Vec<OperationContent>) -> Result<Self> {
+        let submitted_count = self.contents.len();
+        let simulated_count = value.len();
+        if submitted_count != simulated_count {
+            return Err(Error::RpcErrorPlain {
+                description: format!(
+                    "Simulation returned {simulated_count} operation contents for {submitted_count} submitted"
+                ),
+            });
+        }
+
         Ok(Self {
             branch: self.branch,
             contents: self
@@ -278,21 +288,15 @@ impl TryUpdateWith<OperationContent> for tezos_operation::operations::OperationC
 }
 
 fn fee(operation_size: usize, limits: &OperationLimits) -> Result<Mutez> {
-    let gas_fee: Mutez = nanotez_to_mutez(BigUint::from(FEE_PER_GAS_UNIT) * limits.gas.clone())?;
-    let storage_fee: Mutez =
-        nanotez_to_mutez(BigUint::from(FEE_PER_STORAGE_BYTE) * BigUint::from(operation_size))?;
-    let base: Mutez = BASE_FEE.into();
-    let safty_margin: Mutez = FEE_SAFTY_MARGIN.into();
+    let gas_fee = nanotez_to_mutez(&limits.gas * FEE_PER_GAS_UNIT);
+    let storage_fee = nanotez_to_mutez(BigUint::from(operation_size) * FEE_PER_STORAGE_BYTE);
+    let total = gas_fee + storage_fee + BASE_FEE + FEE_SAFTY_MARGIN;
 
-    Ok(base + gas_fee + storage_fee + safty_margin)
+    Ok(total.try_into()?)
 }
 
-fn nanotez_to_mutez(value: BigUint) -> Result<Mutez> {
-    if value.clone() % NANO_TEZ_PER_MUTEZ == 0u8.into() {
-        return Ok((value / NANO_TEZ_PER_MUTEZ).try_into()?);
-    }
-
-    Ok(((value / NANO_TEZ_PER_MUTEZ) + 1u8).try_into()?)
+fn nanotez_to_mutez(value: BigUint) -> BigUint {
+    (value + (NANO_TEZ_PER_MUTEZ - 1)) / NANO_TEZ_PER_MUTEZ
 }
 
 fn operation_content_matches(
@@ -449,13 +453,12 @@ mod test {
 
     use super::*;
 
-    #[tokio::test]
-    async fn test_fee_estimate() -> Result<()> {
-        let server = MockServer::start();
-        let rpc_url = server.base_url();
+    const SIMULATION_RESPONSE: &str = include_str!("__TEST_DATA__/run_operation_result.json");
+
+    fn transaction_operation() -> Result<UnsignedOperation> {
         let block_hash: BlockHash =
             "BKuka2aVwcjNkZrDzFHJMvdCz43RoMt1kFfjKnipNnGsERSAUEn".try_into()?;
-        let operation = UnsignedOperation::new(
+        Ok(UnsignedOperation::new(
             block_hash,
             vec![Transaction::new(
                 "tz1gru9Tsz1X7GaYnsKR2YeGJLTVm4NwMhvb".try_into()?,
@@ -468,23 +471,69 @@ mod test {
                 None,
             )
             .into()],
-        );
+        ))
+    }
 
-        let response = include_str!("__TEST_DATA__/run_operation_result.json");
-
-        server.mock(|when, then| {
+    async fn estimate_with_response(response: &str) -> Result<UnsignedOperation> {
+        let server = MockServer::start();
+        let simulation = server.mock(|when, then| {
             when.method(POST)
                 .path("/chains/main/blocks/head/helpers/scripts/run_operation");
             then.status(200)
                 .header("content-type", "application/json")
                 .body(response);
         });
-        let client = TezosRpc::new(rpc_url);
+        let client = TezosRpc::new(server.base_url());
+        let result = client.min_fee(transaction_operation()?, None).await;
+        simulation.assert();
+        result
+    }
 
-        let result = client.min_fee(operation, None).await?;
-
+    #[tokio::test]
+    async fn test_fee_estimate() -> Result<()> {
+        let result = estimate_with_response(SIMULATION_RESPONSE).await?;
+        assert_eq!(result.contents.len(), 1);
         assert_eq!(Mutez::from(615u32), result.contents[0].fee());
 
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn fee_estimate_rejects_mismatched_content_counts() -> Result<()> {
+        let mut response: serde_json::Value = serde_json::from_str(SIMULATION_RESPONSE)?;
+        let content = response["contents"][0].clone();
+        for contents in [vec![], vec![content.clone(), content]] {
+            let count = contents.len();
+            response["contents"] = contents.into();
+            let error = estimate_with_response(&response.to_string())
+                .await
+                .unwrap_err();
+            assert!(matches!(
+                error,
+                Error::RpcErrorPlain { description }
+                    if description == format!("Simulation returned {count} operation contents for 1 submitted")
+            ));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn fee_checks_the_total_mutez_range() -> Result<()> {
+        let max_mutez = BigUint::from(i64::MAX as u64);
+        // At one byte, the fixed fees total 201 mutez. Gas costs one mutez per ten units.
+        let mut limits = OperationLimits {
+            gas: (&max_mutez - 201u8) * 10u8,
+            storage: 0u8.into(),
+        };
+        assert_eq!(fee(1, &limits)?, max_mutez.try_into()?);
+
+        limits.gas += 1u8;
+        assert!(matches!(
+            fee(1, &limits),
+            Err(Error::Core {
+                source: tezos_core::Error::TryFromBigUInt { .. }
+            })
+        ));
         Ok(())
     }
 }
